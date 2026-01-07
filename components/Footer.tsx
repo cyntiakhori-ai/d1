@@ -64,9 +64,11 @@ const Footer: React.FC = () => {
         
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/50">
           <p>© 2024 عقارات الضاحية. جميع الحقوق محفوظة.</p>
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
             <a href="#" className="hover:text-white transition-all">شروط الخدمة</a>
             <a href="#" className="hover:text-white transition-all">سياسة الخصوصية</a>
+            {/* رابط مخفي للادمن */}
+            <Link to={AppRoutes.ADMIN_LOGIN} className="opacity-0 hover:opacity-100 text-[10px] transition-all">الإدارة</Link>
           </div>
         </div>
       </div>

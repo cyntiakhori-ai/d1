@@ -9,6 +9,8 @@ const Listings: React.FC = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
 
   useEffect(() => {
     let results = propertyService.getAll();
@@ -28,8 +30,16 @@ const Listings: React.FC = () => {
       );
     }
 
+    if (minPrice !== '') {
+      results = results.filter(p => p.price >= parseFloat(minPrice));
+    }
+
+    if (maxPrice !== '') {
+      results = results.filter(p => p.price <= parseFloat(maxPrice));
+    }
+
     setProperties(results);
-  }, [filterType, filterCategory, searchTerm]);
+  }, [filterType, filterCategory, searchTerm, minPrice, maxPrice]);
 
   return (
     <div className="bg-lebanese-stone min-h-screen pb-24">
@@ -58,6 +68,26 @@ const Listings: React.FC = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full px-4 py-3 rounded border border-gray-200 outline-none focus:border-lebanese-bronze text-sm"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">نطاق السعر ($)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input 
+                      type="number" 
+                      placeholder="الأدنى"
+                      value={minPrice}
+                      onChange={(e) => setMinPrice(e.target.value)}
+                      className="w-full px-3 py-3 rounded border border-gray-200 outline-none focus:border-lebanese-bronze text-sm"
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="الأعلى"
+                      value={maxPrice}
+                      onChange={(e) => setMaxPrice(e.target.value)}
+                      className="w-full px-3 py-3 rounded border border-gray-200 outline-none focus:border-lebanese-bronze text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -116,6 +146,8 @@ const Listings: React.FC = () => {
                     setFilterType('all');
                     setFilterCategory('all');
                     setSearchTerm('');
+                    setMinPrice('');
+                    setMaxPrice('');
                   }}
                   className="w-full py-3 text-lebanese-bronze font-bold hover:underline"
                 >

@@ -8,13 +8,20 @@ import Listings from './pages/Listings.tsx';
 import PropertyDetails from './pages/PropertyDetails.tsx';
 import About from './pages/About.tsx';
 import Contact from './pages/Contact.tsx';
+import AdminLogin from './pages/AdminLogin.tsx';
+import AdminDashboard from './pages/AdminDashboard.tsx';
 import { AppRoutes } from './types.ts';
 
 const App: React.FC = () => {
   return (
     <Router>
       <div className="flex flex-col min-h-screen bg-lebanese-stone">
-        <Navbar />
+        {/* إظهار النافبار فقط في صفحات المستخدم */}
+        <Routes>
+          <Route path="/admin/*" element={null} />
+          <Route path="*" element={<Navbar />} />
+        </Routes>
+
         <main className="flex-grow">
           <Routes>
             <Route path={AppRoutes.HOME} element={<Home />} />
@@ -22,9 +29,15 @@ const App: React.FC = () => {
             <Route path={AppRoutes.PROPERTY} element={<PropertyDetails />} />
             <Route path={AppRoutes.ABOUT} element={<About />} />
             <Route path={AppRoutes.CONTACT} element={<Contact />} />
+            <Route path={AppRoutes.ADMIN_LOGIN} element={<AdminLogin />} />
+            <Route path={AppRoutes.ADMIN_DASHBOARD} element={<AdminDashboard />} />
           </Routes>
         </main>
-        <Footer />
+
+        <Routes>
+          <Route path="/admin/*" element={null} />
+          <Route path="*" element={<Footer />} />
+        </Routes>
         
         {/* Floating WhatsApp Action */}
         <a 

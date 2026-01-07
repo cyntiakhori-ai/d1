@@ -16,11 +16,22 @@ export interface Property {
 }
 
 export interface Lead {
+  id: string;
   name: string;
   email: string;
   phone: string;
   propertyId?: string;
   message: string;
+  date: string;
+}
+
+export interface SiteSettings {
+  heroTitle: string;
+  heroSubtitle: string;
+  primaryColor: string;
+  accentColor: string;
+  contactPhone: string;
+  contactEmail: string;
 }
 
 export enum AppRoutes {
@@ -29,4 +40,6 @@ export enum AppRoutes {
   PROPERTY = '/property/:id',
   ABOUT = '/about',
   CONTACT = '/contact',
+  ADMIN_LOGIN = '/admin/login',
+  ADMIN_DASHBOARD = '/admin/dashboard'
 }
