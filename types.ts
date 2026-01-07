@@ -28,8 +28,10 @@ export interface Lead {
 export interface SiteSettings {
   heroTitle: string;
   heroSubtitle: string;
+  heroImage: string;
   primaryColor: string;
   accentColor: string;
+  fontFamily: string;
   contactPhone: string;
   contactEmail: string;
 }
