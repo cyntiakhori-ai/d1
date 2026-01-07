@@ -1,10 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { propertyService } from '../services/propertyService';
-import { Property, AppRoutes } from '../types';
-import { Icons, SITE_INFO } from '../constants';
-import LeadForm from '../components/LeadForm';
+import { propertyService } from '../services/propertyService.ts';
+import { Property, AppRoutes } from '../types.ts';
+import { Icons, SITE_INFO } from '../constants.tsx';
+import LeadForm from '../components/LeadForm.tsx';
 
 const PropertyDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();

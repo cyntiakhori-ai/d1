@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Property } from '../types';
-import { Icons } from '../constants';
+import { Property } from '../types.ts';
+import { Icons } from '../constants.tsx';
 
 interface PropertyCardProps {
   property: Property;

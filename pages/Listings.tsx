@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { propertyService } from '../services/propertyService';
-import PropertyCard from '../components/PropertyCard';
-import { Property } from '../types';
+import { propertyService } from '../services/propertyService.ts';
+import PropertyCard from '../components/PropertyCard.tsx';
+import { Property } from '../types.ts';
 
 const Listings: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);

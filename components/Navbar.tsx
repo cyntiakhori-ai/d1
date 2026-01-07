@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AppRoutes } from '../types';
-import { SITE_INFO } from '../constants';
+import { AppRoutes } from '../types.ts';
+import { SITE_INFO } from '../constants.tsx';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);

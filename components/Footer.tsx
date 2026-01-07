@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AppRoutes } from '../types';
-import { SITE_INFO } from '../constants';
+import { AppRoutes } from '../types.ts';
+import { SITE_INFO } from '../constants.tsx';
 
 const Footer: React.FC = () => {
   return (

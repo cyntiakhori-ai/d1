@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AppRoutes } from '../types';
-import { propertyService } from '../services/propertyService';
-import PropertyCard from '../components/PropertyCard';
+import { AppRoutes } from '../types.ts';
+import { propertyService } from '../services/propertyService.ts';
+import PropertyCard from '../components/PropertyCard.tsx';
 
 const Home: React.FC = () => {
   const featuredProperties = propertyService.getFeatured();
