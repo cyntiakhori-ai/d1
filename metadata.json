@@ -1,0 +1,7 @@
+{
+  "name": "Copy of عقارات الضاحية - Dahieh Real Estate",
+  "description": "منصة عقارية متميزة تقدم أرقى العقارات والفرص الاستثمارية في لبنان بأسلوب عصري وتجربة مستخدم فاخرة.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
