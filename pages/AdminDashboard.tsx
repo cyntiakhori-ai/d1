@@ -78,14 +78,26 @@ const AdminDashboard: React.FC = () => {
 
   const handleSaveProperty = (e: React.FormEvent) => {
     e.preventDefault();
-    const newProp: Property = {
-      ...(formData as Property),
-      id: editingId || Date.now().toString(),
-    };
-    propertyService.save(newProp);
-    setProperties(propertyService.getAll());
-    setIsFormOpen(false);
-    setEditingId(null);
+    try {
+      const newProp: Property = {
+        ...(formData as Property),
+        id: editingId || Date.now().toString(),
+      };
+      
+      if (!newProp.images || newProp.images.length === 0) {
+        alert('يرجى إضافة صورة واحدة على الأقل للعقار.');
+        return;
+      }
+
+      propertyService.save(newProp);
+      setProperties(propertyService.getAll());
+      setIsFormOpen(false);
+      setEditingId(null);
+      alert('تم حفظ العقار بنجاح!');
+    } catch (error) {
+      console.error("Save error:", error);
+      alert('فشل حفظ العقار. قد يكون ذلك بسبب حجم الصور الكبير جداً. حاول استخدام صور أقل أو أصغر حجماً.');
+    }
   };
 
   const addImageUrl = () => {
@@ -95,6 +107,46 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // وظيفة لضغط الصور وتصغير حجمها لضمان عمل localStorage
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          // ضغط الصورة بجودة 0.7
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.onerror = reject;
+      };
+      reader.onerror = reject;
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'property' | 'hero') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -102,19 +154,12 @@ const AdminDashboard: React.FC = () => {
     setIsUploading(true);
     const newImages: string[] = [];
 
-    const toBase64 = (file: File): Promise<string> => 
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = error => reject(error);
-      });
-
     try {
       for (let i = 0; i < files.length; i++) {
-        const base64 = await toBase64(files[i]);
-        newImages.push(base64);
+        const compressedBase64 = await compressImage(files[i]);
+        newImages.push(compressedBase64);
       }
+      
       if (target === 'property') {
         setFormData(prev => ({ 
           ...prev, 
@@ -125,7 +170,7 @@ const AdminDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error("Error uploading images:", error);
-      alert("حدث خطأ أثناء رفع الصور.");
+      alert("حدث خطأ أثناء معالجة الصور.");
     } finally {
       setIsUploading(false);
       e.target.value = ''; // Reset input
@@ -163,8 +208,12 @@ const AdminDashboard: React.FC = () => {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    cmsService.saveSettings(settings);
-    alert('تم حفظ إعدادات الموقع بنجاح');
+    try {
+      cmsService.saveSettings(settings);
+      alert('تم حفظ إعدادات الموقع بنجاح');
+    } catch (error) {
+      alert('فشل حفظ الإعدادات، ربما بسبب حجم صورة الـ Hero الكبير.');
+    }
   };
 
   const handleLogout = () => {
