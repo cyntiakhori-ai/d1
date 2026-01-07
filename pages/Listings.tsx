@@ -13,32 +13,37 @@ const Listings: React.FC = () => {
   const [maxPrice, setMaxPrice] = useState<string>('');
 
   useEffect(() => {
-    let results = propertyService.getAll();
-    
-    if (filterType !== 'all') {
-      results = results.filter(p => p.type === filterType);
-    }
-    
-    if (filterCategory !== 'all') {
-      results = results.filter(p => p.category === filterCategory);
-    }
+    // Await the async call to get all properties before filtering
+    const loadProperties = async () => {
+      let results = await propertyService.getAll();
+      
+      if (filterType !== 'all') {
+        results = results.filter(p => p.type === filterType);
+      }
+      
+      if (filterCategory !== 'all') {
+        results = results.filter(p => p.category === filterCategory);
+      }
 
-    if (searchTerm) {
-      results = results.filter(p => 
-        p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.location.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+      if (searchTerm) {
+        results = results.filter(p => 
+          p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          p.location.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
 
-    if (minPrice !== '') {
-      results = results.filter(p => p.price >= parseFloat(minPrice));
-    }
+      if (minPrice !== '') {
+        results = results.filter(p => p.price >= parseFloat(minPrice));
+      }
 
-    if (maxPrice !== '') {
-      results = results.filter(p => p.price <= parseFloat(maxPrice));
-    }
+      if (maxPrice !== '') {
+        results = results.filter(p => p.price <= parseFloat(maxPrice));
+      }
 
-    setProperties(results);
+      setProperties(results);
+    };
+
+    loadProperties();
   }, [filterType, filterCategory, searchTerm, minPrice, maxPrice]);
 
   return (

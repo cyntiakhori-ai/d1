@@ -12,10 +12,14 @@ const PropertyDetails: React.FC = () => {
   const [activeImg, setActiveImg] = useState(0);
 
   useEffect(() => {
-    if (id) {
-      const data = propertyService.getById(id);
-      if (data) setProperty(data);
-    }
+    // Await the async call to get property details
+    const loadProperty = async () => {
+      if (id) {
+        const data = await propertyService.getById(id);
+        if (data) setProperty(data);
+      }
+    };
+    loadProperty();
   }, [id]);
 
   if (!property) {

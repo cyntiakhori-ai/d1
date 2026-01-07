@@ -1,18 +1,40 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AppRoutes, SiteSettings } from '../types.ts';
+import { AppRoutes, SiteSettings, Property } from '../types.ts';
 import { propertyService } from '../services/propertyService.ts';
 import { cmsService } from '../services/cmsService.ts';
 import PropertyCard from '../components/PropertyCard.tsx';
 
 const Home: React.FC = () => {
-  const [featuredProperties, setFeaturedProperties] = useState(propertyService.getFeatured());
-  const [settings, setSettings] = useState<SiteSettings>(cmsService.getSettings());
+  const [featuredProperties, setFeaturedProperties] = useState<Property[]>([]);
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    cmsService.applySettings(settings);
-  }, [settings]);
+    const loadData = async () => {
+      const [fetchedSettings, fetchedProps] = await Promise.all([
+        cmsService.getSettings(),
+        propertyService.getFeatured()
+      ]);
+      setSettings(fetchedSettings);
+      setFeaturedProperties(fetchedProps);
+      cmsService.applySettings(fetchedSettings);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
+
+  if (loading || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-lebanese-stone">
+        <div className="text-center animate-pulse">
+          <div className="w-16 h-16 border-4 border-lebanese-bronze border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-lebanese-green font-black">جاري تحميل عقارات الضاحية...</h2>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -56,7 +78,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Trust Stats Section */}
+      {/* Trust Stats */}
       <section className="bg-lebanese-stone py-16 -mt-12 relative z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white p-10 md:p-14 rounded-[3rem] shadow-2xl grid grid-cols-2 md:grid-cols-4 gap-12 border border-lebanese-bronze/5">
@@ -97,7 +119,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Newsletter CTA */}
+      {/* Newsletter/Contact CTA */}
       <section className="py-32 bg-lebanese-stone">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-lebanese-green p-16 md:p-24 rounded-[4rem] shadow-2xl text-center relative overflow-hidden group">
@@ -115,10 +137,10 @@ const Home: React.FC = () => {
                   اطلب استشارة الآن
                 </Link>
                 <a 
-                  href={`tel:${settings.contactPhone}`} 
+                  href={`https://wa.me/${settings.contactPhone.replace(/\s+/g, '')}`} 
                   className="bg-lebanese-bronze/20 backdrop-blur-md border border-white/20 text-white px-14 py-5 rounded-2xl font-black text-xl shadow-2xl hover:bg-white hover:text-lebanese-green transition-all w-full md:w-auto flex items-center justify-center gap-4"
                 >
-                  <span>WhatsApp تواصل عبر</span>
+                  <span>واتساب تواصل عبر</span>
                 </a>
               </div>
             </div>

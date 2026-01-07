@@ -9,45 +9,53 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'properties' | 'content' | 'leads' | 'settings'>('properties');
   const [properties, setProperties] = useState<Property[]>([]);
-  const [settings, setSettings] = useState<SiteSettings>(cmsService.getSettings());
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [loading, setLoading] = useState(true);
   
   // Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Property>>({
-    title: '',
-    price: 0,
-    location: '',
-    category: 'sale',
-    type: 'apartment',
-    bedrooms: 0,
-    bathrooms: 0,
-    area: 0,
-    description: '',
-    images: [],
-    amenities: [],
-    featured: false
+    title: '', price: 0, location: '', category: 'sale', type: 'apartment',
+    bedrooms: 0, bathrooms: 0, area: 0, description: '', images: [],
+    amenities: [], featured: false
   });
   const [imageUrl, setImageUrl] = useState('');
   const [amenityInput, setAmenityInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Leads Storage (Simulated)
-  const [leads] = useState<Lead[]>([
-    { id: '1', name: 'أحمد جابر', email: 'ahmad@example.com', phone: '70123456', message: 'مهتم بشقة حارة حريك', date: '2024-05-20' }
-  ]);
+  // Leads
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   useEffect(() => {
     const isAdmin = localStorage.getItem('isAdmin');
-    if (!isAdmin) navigate(AppRoutes.ADMIN_LOGIN);
-    setProperties(propertyService.getAll());
-    cmsService.applySettings(settings);
-  }, [navigate, settings]);
+    if (!isAdmin) {
+      navigate(AppRoutes.ADMIN_LOGIN);
+      return;
+    }
+    refreshData();
+  }, [navigate]);
 
-  const handleDeleteProperty = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا العقار؟')) {
-      propertyService.delete(id);
-      setProperties(propertyService.getAll());
+  const refreshData = async () => {
+    setLoading(true);
+    const [props, sett, fetchLeads] = await Promise.all([
+      propertyService.getAll(),
+      cmsService.getSettings(),
+      fetch('api/leads.php').then(res => res.json()).catch(() => [])
+    ]);
+    setProperties(props);
+    setSettings(sett);
+    setLeads(fetchLeads);
+    cmsService.applySettings(sett);
+    setLoading(false);
+  };
+
+  const handleDeleteProperty = async (id: string) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا العقار من قاعدة البيانات؟')) {
+      const success = await propertyService.delete(id);
+      if (success) refreshData();
+      else alert('فشل حذف العقار');
     }
   };
 
@@ -60,54 +68,38 @@ const AdminDashboard: React.FC = () => {
   const handleAddNew = () => {
     setEditingId(null);
     setFormData({
-      title: '',
-      price: 0,
-      location: '',
-      category: 'sale',
-      type: 'apartment',
-      bedrooms: 0,
-      bathrooms: 0,
-      area: 0,
-      description: '',
-      images: [],
-      amenities: [],
-      featured: false
+      title: '', price: 0, location: '', category: 'sale', type: 'apartment',
+      bedrooms: 0, bathrooms: 0, area: 0, description: '', images: [],
+      amenities: [], featured: false
     });
     setIsFormOpen(true);
   };
 
-  const handleSaveProperty = (e: React.FormEvent) => {
+  const handleSaveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const newProp: Property = {
-        ...(formData as Property),
-        id: editingId || Date.now().toString(),
-      };
-      
-      if (!newProp.images || newProp.images.length === 0) {
-        alert('يرجى إضافة صورة واحدة على الأقل للعقار.');
-        return;
-      }
+    setIsSaving(true);
+    const newProp: Property = {
+      ...(formData as Property),
+      id: editingId || Date.now().toString(),
+    };
+    
+    if (!newProp.images || newProp.images.length === 0) {
+      alert('يرجى إضافة صورة واحدة على الأقل.');
+      setIsSaving(false);
+      return;
+    }
 
-      propertyService.save(newProp);
-      setProperties(propertyService.getAll());
+    const success = await propertyService.save(newProp);
+    if (success) {
       setIsFormOpen(false);
-      setEditingId(null);
-      alert('تم حفظ العقار بنجاح!');
-    } catch (error) {
-      console.error("Save error:", error);
-      alert('فشل حفظ العقار. قد يكون ذلك بسبب حجم الصور الكبير جداً. حاول استخدام صور أقل أو أصغر حجماً.');
+      refreshData();
+      alert('تم حفظ العقار في قاعدة البيانات بنجاح');
+    } else {
+      alert('حدث خطأ أثناء الحفظ. تأكد من حجم الصور.');
     }
+    setIsSaving(false);
   };
 
-  const addImageUrl = () => {
-    if (imageUrl) {
-      setFormData({ ...formData, images: [...(formData.images || []), imageUrl] });
-      setImageUrl('');
-    }
-  };
-
-  // وظيفة لضغط الصور وتصغير حجمها لضمان عمل localStorage
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -118,30 +110,18 @@ const AdminDashboard: React.FC = () => {
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 600;
           let width = img.width;
           let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
           }
-
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          // ضغط الصورة بجودة 0.7
           resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
-        img.onerror = reject;
       };
       reader.onerror = reject;
     });
@@ -150,70 +130,30 @@ const AdminDashboard: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'property' | 'hero') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     setIsUploading(true);
-    const newImages: string[] = [];
-
     try {
+      const newImages: string[] = [];
       for (let i = 0; i < files.length; i++) {
-        const compressedBase64 = await compressImage(files[i]);
-        newImages.push(compressedBase64);
+        const compressed = await compressImage(files[i]);
+        newImages.push(compressed);
       }
-      
       if (target === 'property') {
-        setFormData(prev => ({ 
-          ...prev, 
-          images: [...(prev.images || []), ...newImages] 
-        }));
-      } else {
-        setSettings(prev => ({ ...prev, heroImage: newImages[0] }));
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...newImages] }));
+      } else if (settings) {
+        setSettings({ ...settings, heroImage: newImages[0] });
       }
-    } catch (error) {
-      console.error("Error uploading images:", error);
-      alert("حدث خطأ أثناء معالجة الصور.");
-    } finally {
-      setIsUploading(false);
-      e.target.value = ''; // Reset input
-    }
+    } catch (err) { alert('خطأ في معالجة الصور'); }
+    setIsUploading(false);
   };
 
-  const removeImage = (index: number) => {
-    const newImages = [...(formData.images || [])];
-    newImages.splice(index, 1);
-    setFormData({ ...formData, images: newImages });
-  };
-
-  const moveImage = (index: number, direction: 'up' | 'down') => {
-    const images = [...(formData.images || [])];
-    if (direction === 'up' && index > 0) {
-      [images[index], images[index - 1]] = [images[index - 1], images[index]];
-    } else if (direction === 'down' && index < images.length - 1) {
-      [images[index], images[index + 1]] = [images[index + 1], images[index]];
-    }
-    setFormData({ ...formData, images });
-  };
-
-  const addAmenity = () => {
-    if (amenityInput) {
-      setFormData({ ...formData, amenities: [...(formData.amenities || []), amenityInput] });
-      setAmenityInput('');
-    }
-  };
-
-  const removeAmenity = (index: number) => {
-    const newAmenities = [...(formData.amenities || [])];
-    newAmenities.splice(index, 1);
-    setFormData({ ...formData, amenities: newAmenities });
-  };
-
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      cmsService.saveSettings(settings);
-      alert('تم حفظ إعدادات الموقع بنجاح');
-    } catch (error) {
-      alert('فشل حفظ الإعدادات، ربما بسبب حجم صورة الـ Hero الكبير.');
-    }
+    if (!settings) return;
+    setIsSaving(true);
+    const success = await cmsService.saveSettings(settings);
+    if (success) alert('تم تحديث إعدادات الموقع بنجاح');
+    else alert('فشل تحديث الإعدادات');
+    setIsSaving(false);
   };
 
   const handleLogout = () => {
@@ -221,13 +161,21 @@ const AdminDashboard: React.FC = () => {
     navigate(AppRoutes.ADMIN_LOGIN);
   };
 
+  if (loading || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-lebanese-green border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row overflow-hidden">
       {/* Sidebar */}
       <aside className="w-full md:w-72 bg-lebanese-green text-white p-8 flex flex-col shadow-2xl z-20 h-screen sticky top-0">
         <div className="mb-12">
           <h2 className="text-2xl font-black tracking-tighter">إدارة <span className="text-lebanese-bronze">الضاحية</span></h2>
-          <p className="text-xs text-white/50 mt-1 uppercase tracking-widest">تحكم كامل بالمحتوى</p>
+          <p className="text-xs text-white/50 mt-1 uppercase tracking-widest">متصل بقاعدة البيانات</p>
         </div>
         
         <nav className="space-y-2 flex-grow">
@@ -253,20 +201,13 @@ const AdminDashboard: React.FC = () => {
         </button>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 overflow-y-auto h-screen">
         <header className="flex justify-between items-center mb-12">
-          <div>
-            <h1 className="text-4xl font-black text-lebanese-green mb-2">
-              {activeTab === 'properties' ? (isFormOpen ? (editingId ? 'تعديل عقار' : 'إضافة عقار جديد') : 'قائمة العقارات') : activeTab === 'content' ? 'إدارة محتوى الموقع' : activeTab === 'leads' ? 'طلبات العملاء' : 'إعدادات الهوية البصرية'}
-            </h1>
-            <p className="text-gray-400 font-medium">نظام إدارة المحتوى المتكامل لعقارات الضاحية</p>
-          </div>
+          <h1 className="text-4xl font-black text-lebanese-green">
+            {activeTab === 'properties' ? (isFormOpen ? 'تعديل بيانات العقار' : 'قائمة العقارات') : activeTab === 'content' ? 'إدارة المحتوى' : activeTab === 'leads' ? 'طلبات العملاء الجدد' : 'الهوية البصرية'}
+          </h1>
           {activeTab === 'properties' && !isFormOpen && (
-            <button 
-              onClick={handleAddNew}
-              className="bg-lebanese-bronze text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1"
-            >
+            <button onClick={handleAddNew} className="bg-lebanese-bronze text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-2xl transition-all">
               + إضافة عقار جديد
             </button>
           )}
@@ -279,8 +220,6 @@ const AdminDashboard: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4 font-black text-gray-400 text-sm">العقار</th>
                   <th className="px-6 py-4 font-black text-gray-400 text-sm">السعر</th>
-                  <th className="px-6 py-4 font-black text-gray-400 text-sm">المنطقة</th>
-                  <th className="px-6 py-4 font-black text-gray-400 text-sm">الحالة</th>
                   <th className="px-6 py-4 font-black text-gray-400 text-sm">الإجراءات</th>
                 </tr>
               </thead>
@@ -288,21 +227,13 @@ const AdminDashboard: React.FC = () => {
                 {properties.map(prop => (
                   <tr key={prop.id} className="hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-4 flex items-center gap-4">
-                      <img src={prop.images[0] || 'https://via.placeholder.com/150'} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
+                      <img src={prop.images[0]} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
                       <span className="font-bold text-lebanese-green">{prop.title}</span>
                     </td>
                     <td className="px-6 py-4 font-bold text-lebanese-bronze">${prop.price.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-gray-500 font-medium">{prop.location}</td>
-                    <td className="px-6 py-4">
-                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${prop.category === 'sale' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                         {prop.category === 'sale' ? 'للبيع' : 'للايجار'}
-                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEditProperty(prop)} className="p-3 bg-gray-100 hover:bg-lebanese-green hover:text-white rounded-xl transition-all">✏️</button>
-                        <button onClick={() => handleDeleteProperty(prop.id)} className="p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all">🗑️</button>
-                      </div>
+                    <td className="px-6 py-4 flex gap-2">
+                      <button onClick={() => handleEditProperty(prop)} className="p-3 bg-gray-100 hover:bg-lebanese-green hover:text-white rounded-xl transition-all">✏️</button>
+                      <button onClick={() => handleDeleteProperty(prop.id)} className="p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all">🗑️</button>
                     </td>
                   </tr>
                 ))}
@@ -312,400 +243,76 @@ const AdminDashboard: React.FC = () => {
         )}
 
         {activeTab === 'properties' && isFormOpen && (
-          <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 max-w-5xl mx-auto mb-20">
+          <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 max-w-5xl mx-auto">
             <form onSubmit={handleSaveProperty} className="space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <label className="block text-sm font-black text-gray-700 mb-2">عنوان العقار</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={formData.title}
-                    onChange={e => setFormData({...formData, title: e.target.value})}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none"
-                    placeholder="مثال: شقة فاخرة في المعمورة"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-gray-700 mb-2">السعر ($)</label>
-                  <input 
-                    type="number" 
-                    required
-                    value={formData.price}
-                    onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-gray-700 mb-2">المنطقة / الموقع</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={formData.location}
-                    onChange={e => setFormData({...formData, location: e.target.value})}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none"
-                    placeholder="مثال: الغبيري، شارع العام"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">النوع</label>
-                    <select 
-                      value={formData.type}
-                      onChange={e => setFormData({...formData, type: e.target.value as any})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none"
-                    >
-                      <option value="apartment">شقة</option>
-                      <option value="villa">فيلا</option>
-                      <option value="commercial">تجاري</option>
-                      <option value="land">أرض</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">التصنيف</label>
-                    <select 
-                      value={formData.category}
-                      onChange={e => setFormData({...formData, category: e.target.value as any})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none"
-                    >
-                      <option value="sale">للبيع</option>
-                      <option value="rent">للايجار</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">غرف النوم</label>
-                    <input type="number" value={formData.bedrooms} onChange={e => setFormData({...formData, bedrooms: parseInt(e.target.value)})} className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">الحمامات</label>
-                    <input type="number" value={formData.bathrooms} onChange={e => setFormData({...formData, bathrooms: parseInt(e.target.value)})} className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">المساحة م²</label>
-                    <input type="number" value={formData.area} onChange={e => setFormData({...formData, area: parseInt(e.target.value)})} className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl">
-                   <input 
-                    type="checkbox" 
-                    id="featured"
-                    checked={formData.featured}
-                    onChange={e => setFormData({...formData, featured: e.target.checked})}
-                    className="w-6 h-6 accent-lebanese-bronze cursor-pointer"
-                   />
-                   <label htmlFor="featured" className="text-sm font-black text-gray-700 cursor-pointer">تمييز العقار (يظهر في الرئيسية)</label>
-                </div>
+                <input type="text" placeholder="عنوان العقار" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-5 py-4 rounded-2xl border border-gray-200" />
+                <input type="number" placeholder="السعر $" required value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} className="w-full px-5 py-4 rounded-2xl border border-gray-200" />
               </div>
-
-              <div>
-                <label className="block text-sm font-black text-gray-700 mb-2">وصف العقار التفصيلي</label>
-                <textarea 
-                  required
-                  rows={6}
-                  value={formData.description}
-                  onChange={e => setFormData({...formData, description: e.target.value})}
-                  className="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:border-lebanese-bronze outline-none leading-relaxed"
-                  placeholder="أدخل مواصفات العقار، المزايا، وحالة السند..."
-                />
-              </div>
-
-              {/* Enhanced Image Management */}
-              <div className="border-t border-gray-100 pt-10">
-                <h3 className="text-xl font-black text-lebanese-green mb-6 flex items-center gap-3">
-                  🖼️ إدارة معرض الصور
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-                    <p className="text-xs font-black text-gray-400 mb-4 uppercase tracking-wider">إضافة عبر رابط URL</p>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="https://..."
-                        value={imageUrl}
-                        onChange={e => setImageUrl(e.target.value)}
-                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-lebanese-bronze text-sm"
-                      />
-                      <button type="button" onClick={addImageUrl} className="bg-lebanese-green text-white px-6 rounded-xl font-bold text-sm">إضافة</button>
+              
+              <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                 <p className="text-xs font-black text-gray-400 mb-4 uppercase">صور العقار (قاعدة البيانات)</p>
+                 <div className="relative">
+                    <input type="file" multiple accept="image/*" onChange={(e) => handleFileUpload(e, 'property')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    <div className="py-8 border-2 border-dashed border-gray-300 bg-white rounded-2xl text-center text-gray-400 font-bold">
+                       {isUploading ? 'جاري ضغط ورفع الصور...' : 'انقر هنا لاختيار صور العقار'}
                     </div>
-                  </div>
-
-                  <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-                    <p className="text-xs font-black text-gray-400 mb-4 uppercase tracking-wider">رفع من الجهاز</p>
-                    <div className="relative">
-                      <input 
-                        type="file" 
-                        multiple 
-                        accept="image/*"
-                        onChange={(e) => handleFileUpload(e, 'property')}
-                        disabled={isUploading}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
-                      <div className={`flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 bg-white text-gray-500 font-bold text-sm ${isUploading ? 'animate-pulse' : 'hover:border-lebanese-bronze'}`}>
-                        {isUploading ? 'جاري الرفع...' : '📁 اختر صور العقار'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 bg-gray-50 p-8 rounded-[2rem]">
-                  {formData.images && formData.images.length > 0 ? (
-                    formData.images.map((img, idx) => (
-                      <div key={idx} className={`relative group aspect-[4/3] rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border-4 ${idx === 0 ? 'border-lebanese-bronze' : 'border-white'}`}>
+                 </div>
+                 <div className="grid grid-cols-4 gap-4 mt-6">
+                    {formData.images?.map((img, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-md">
                         <img src={img} className="w-full h-full object-cover" />
-                        
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
-                          <button 
-                            type="button"
-                            onClick={() => removeImage(idx)}
-                            className="bg-red-500 text-white w-10 h-10 rounded-full shadow-lg font-bold"
-                          >✕</button>
-                          
-                          <div className="flex gap-2">
-                            <button 
-                              type="button"
-                              onClick={() => moveImage(idx, 'up')}
-                              disabled={idx === 0}
-                              className={`bg-white text-lebanese-green w-8 h-8 rounded-full flex items-center justify-center font-bold ${idx === 0 ? 'opacity-30' : 'hover:scale-110'}`}
-                            >↑</button>
-                            <button 
-                              type="button"
-                              onClick={() => moveImage(idx, 'down')}
-                              disabled={idx === formData.images!.length - 1}
-                              className={`bg-white text-lebanese-green w-8 h-8 rounded-full flex items-center justify-center font-bold ${idx === formData.images!.length - 1 ? 'opacity-30' : 'hover:scale-110'}`}
-                            >↓</button>
-                          </div>
-                        </div>
-
-                        {idx === 0 && (
-                          <div className="absolute top-2 right-2 bg-lebanese-bronze text-white text-[10px] px-3 py-1 rounded-full font-black uppercase shadow-lg">الصورة الرئيسية</div>
-                        )}
+                        <button type="button" onClick={() => {
+                          const newImgs = [...formData.images!];
+                          newImgs.splice(idx, 1);
+                          setFormData({...formData, images: newImgs});
+                        }} className="absolute top-1 left-1 bg-red-500 text-white w-6 h-6 rounded-full text-xs">✕</button>
                       </div>
-                    ))
-                  ) : (
-                    <div className="col-span-full py-16 text-center text-gray-400 font-bold border-2 border-dashed border-gray-200 rounded-3xl bg-white/50">
-                      لا يوجد صور حالياً. يرجى إضافة صورة واحدة على الأقل.
-                    </div>
-                  )}
-                </div>
+                    ))}
+                 </div>
               </div>
 
-              {/* Amenities */}
-              <div className="border-t border-gray-100 pt-10">
-                <label className="block text-sm font-black text-gray-700 mb-4 uppercase tracking-wider">الخدمات والمميزات</label>
-                <div className="flex gap-4 mb-6">
-                  <input 
-                    type="text" 
-                    placeholder="مثال: مصعد، موقف خاص، طاقة شمسية..."
-                    value={amenityInput}
-                    onChange={e => setAmenityInput(e.target.value)}
-                    className="flex-1 px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze"
-                  />
-                  <button type="button" onClick={addAmenity} className="bg-lebanese-green text-white px-8 rounded-2xl font-black">إضافة</button>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {formData.amenities?.map((amen, idx) => (
-                    <span key={idx} className="bg-white px-5 py-3 rounded-2xl text-sm font-black text-lebanese-green border border-gray-100 shadow-sm flex items-center gap-4 hover:border-red-100 group transition-all">
-                      {amen}
-                      <button type="button" onClick={() => removeAmenity(idx)} className="text-gray-300 group-hover:text-red-500 font-bold">✕</button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-4 pt-12 border-t border-gray-100">
-                <button type="submit" className="flex-1 bg-lebanese-green text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-lebanese-bronze transition-all transform hover:-translate-y-1">حفظ العقار الآن</button>
-                <button type="button" onClick={() => setIsFormOpen(false)} className="px-12 py-5 rounded-2xl font-black text-gray-400 hover:bg-gray-100 transition-all">إلغاء</button>
+              <div className="flex gap-4">
+                <button type="submit" disabled={isSaving} className="flex-1 bg-lebanese-green text-white py-5 rounded-2xl font-black text-lg shadow-xl disabled:opacity-50">
+                  {isSaving ? 'جاري الحفظ...' : 'حفظ التعديلات في قاعدة البيانات'}
+                </button>
+                <button type="button" onClick={() => setIsFormOpen(false)} className="px-12 py-5 bg-gray-100 text-gray-400 rounded-2xl font-black">إلغاء</button>
               </div>
             </form>
           </div>
         )}
 
         {activeTab === 'content' && (
-          <div className="max-w-4xl bg-white p-10 rounded-[3rem] shadow-sm border border-gray-100 mx-auto">
+          <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
             <form onSubmit={handleSaveSettings} className="space-y-10">
-              <div className="grid grid-cols-1 gap-10">
-                <div>
-                  <label className="block text-sm font-black text-gray-700 mb-4">صورة الـ Hero (الخلفية الرئيسية)</label>
-                  <div className="flex flex-col md:flex-row gap-6 items-center bg-gray-50 p-8 rounded-3xl border border-gray-100">
-                    <div className="w-full md:w-64 h-40 rounded-2xl overflow-hidden shadow-lg border-4 border-white">
-                      <img src={settings.heroImage} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 w-full space-y-4">
-                      <input 
-                        type="text"
-                        value={settings.heroImage}
-                        onChange={e => setSettings({...settings, heroImage: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-xs font-mono"
-                        placeholder="https://..."
-                      />
-                      <div className="relative">
-                        <input 
-                          type="file" 
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(e, 'hero')}
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                        <button type="button" className="w-full py-3 bg-white border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-lebanese-bronze transition-all">
-                          رفع صورة جديدة من الجهاز
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-3">عنوان الصفحة الرئيسية</label>
-                    <input 
-                      type="text" 
-                      value={settings.heroTitle}
-                      onChange={e => setSettings({...settings, heroTitle: e.target.value})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze transition-all font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-3">الوصف الجانبي (Hero Subtitle)</label>
-                    <textarea 
-                      rows={4}
-                      value={settings.heroSubtitle}
-                      onChange={e => setSettings({...settings, heroSubtitle: e.target.value})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze transition-all leading-relaxed"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-3">رقم الهاتف للواتساب</label>
-                    <input 
-                      type="text" 
-                      value={settings.contactPhone}
-                      onChange={e => setSettings({...settings, contactPhone: e.target.value})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-3">البريد الإلكتروني للشركة</label>
-                    <input 
-                      type="email" 
-                      value={settings.contactEmail}
-                      onChange={e => setSettings({...settings, contactEmail: e.target.value})}
-                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze"
-                    />
-                  </div>
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-lebanese-green text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-lebanese-bronze transition-all transform hover:-translate-y-1 text-lg">
-                تحديث محتوى الموقع
-              </button>
+               <div>
+                  <label className="block text-sm font-black text-gray-700 mb-3">عنوان الـ Hero</label>
+                  <input type="text" value={settings.heroTitle} onChange={e => setSettings({...settings, heroTitle: e.target.value})} className="w-full px-5 py-4 rounded-2xl border border-gray-200" />
+               </div>
+               <button type="submit" disabled={isSaving} className="w-full bg-lebanese-green text-white py-5 rounded-2xl font-black text-lg">
+                  تحديث محتوى الموقع
+               </button>
             </form>
-          </div>
-        )}
-
-        {activeTab === 'settings' && (
-          <div className="max-w-4xl bg-white p-12 rounded-[3rem] shadow-sm border border-gray-100 mx-auto">
-             <div className="space-y-12">
-                <div>
-                   <h3 className="text-xl font-black text-lebanese-green mb-8 flex items-center gap-3">🎨 الهوية البصرية والألوان</h3>
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
-                        <label className="block text-sm font-black text-gray-700 mb-4">اللون الأساسي (Primary Green)</label>
-                        <div className="flex items-center gap-6">
-                          <input 
-                            type="color" 
-                            value={settings.primaryColor}
-                            onChange={e => setSettings({...settings, primaryColor: e.target.value})}
-                            className="w-24 h-24 rounded-2xl cursor-pointer border-4 border-white shadow-lg"
-                          />
-                          <input 
-                            type="text" 
-                            value={settings.primaryColor}
-                            onChange={e => setSettings({...settings, primaryColor: e.target.value})}
-                            className="font-mono text-gray-400 bg-transparent border-b border-gray-200 outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
-                        <label className="block text-sm font-black text-gray-700 mb-4">اللون المميز (Bronze Accent)</label>
-                        <div className="flex items-center gap-6">
-                          <input 
-                            type="color" 
-                            value={settings.accentColor}
-                            onChange={e => setSettings({...settings, accentColor: e.target.value})}
-                            className="w-24 h-24 rounded-2xl cursor-pointer border-4 border-white shadow-lg"
-                          />
-                          <input 
-                            type="text" 
-                            value={settings.accentColor}
-                            onChange={e => setSettings({...settings, accentColor: e.target.value})}
-                            className="font-mono text-gray-400 bg-transparent border-b border-gray-200 outline-none"
-                          />
-                        </div>
-                      </div>
-                   </div>
-                </div>
-
-                <div>
-                   <h3 className="text-xl font-black text-lebanese-green mb-8 flex items-center gap-3">🔤 الخطوط (Typography)</h3>
-                   <div className="bg-gray-50 p-8 rounded-3xl border border-gray-100">
-                      <label className="block text-sm font-black text-gray-700 mb-4">نوع الخط المستخدم (Font Family)</label>
-                      <select 
-                        value={settings.fontFamily}
-                        onChange={e => setSettings({...settings, fontFamily: e.target.value})}
-                        className="w-full px-5 py-4 rounded-2xl border border-gray-200 outline-none focus:border-lebanese-bronze font-bold"
-                      >
-                        <option value="'Almarai', sans-serif">Almarai (عصري)</option>
-                        <option value="'Cairo', sans-serif">Cairo (كلاسيكي)</option>
-                        <option value="'Tajawal', sans-serif">Tajawal (أنيق)</option>
-                        <option value="system-ui, sans-serif">System Default</option>
-                      </select>
-                      <p className="mt-4 text-xs text-gray-400">سيتم تطبيق الخط فوراً على كافة نصوص الموقع.</p>
-                   </div>
-                </div>
-
-                <button 
-                  onClick={handleSaveSettings}
-                  className="w-full bg-lebanese-green text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-lebanese-bronze transition-all transform hover:-translate-y-1 text-lg"
-                >
-                  تطبيق الإعدادات الجديدة
-                </button>
-             </div>
           </div>
         )}
 
         {activeTab === 'leads' && (
           <div className="grid grid-cols-1 gap-6 max-w-5xl mx-auto">
-            {leads.map(lead => (
+            {leads.length > 0 ? leads.map(lead => (
               <div key={lead.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center group gap-6">
                 <div className="flex-1">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl shadow-inner">👤</div>
-                    <div>
-                      <h3 className="text-xl font-black text-lebanese-green">{lead.name}</h3>
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{lead.date}</span>
-                    </div>
-                  </div>
-                  <p className="text-gray-500 mb-6 leading-relaxed bg-gray-50/50 p-4 rounded-2xl border border-gray-50">"{lead.message}"</p>
-                  <div className="flex flex-wrap gap-4">
-                    <a href={`tel:${lead.phone}`} className="bg-white px-5 py-2.5 rounded-xl text-sm font-bold text-gray-700 border border-gray-200 shadow-sm hover:shadow-md transition-all">📞 {lead.phone}</a>
-                    <a href={`mailto:${lead.email}`} className="bg-white px-5 py-2.5 rounded-xl text-sm font-bold text-gray-700 border border-gray-200 shadow-sm hover:shadow-md transition-all">✉️ {lead.email}</a>
+                  <h3 className="text-xl font-black text-lebanese-green mb-2">{lead.name}</h3>
+                  <p className="text-gray-500 mb-4 bg-gray-50 p-4 rounded-xl">"{lead.message}"</p>
+                  <div className="flex gap-4 text-sm font-bold">
+                    <span className="text-lebanese-bronze">📞 {lead.phone}</span>
+                    <span className="text-gray-400">✉️ {lead.email}</span>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 w-full md:w-auto">
-                  <a 
-                    href={`https://wa.me/${lead.phone.replace(/\s+/g, '')}`} 
-                    target="_blank"
-                    className="bg-green-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-green-600 text-center transition-all transform hover:scale-105"
-                  >
-                    واتساب العميل
-                  </a>
-                  <button className="bg-gray-100 text-gray-400 px-8 py-3 rounded-2xl font-bold text-sm">أرشفة الطلب</button>
-                </div>
+                <a href={`https://wa.me/${lead.phone.replace(/\s+/g, '')}`} target="_blank" className="bg-green-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg">واتساب</a>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-gray-400">لا يوجد طلبات جديدة حالياً</div>
+            )}
           </div>
         )}
       </main>
